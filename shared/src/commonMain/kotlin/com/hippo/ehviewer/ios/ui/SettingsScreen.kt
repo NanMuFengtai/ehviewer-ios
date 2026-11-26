@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -152,10 +154,10 @@ fun HistoryScreen(
                 Text("还没有记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            androidx.compose.foundation.lazy.LazyColumn(
+            LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
             ) {
-                androidx.compose.foundation.lazy.items(entries) { e ->
+                items(entries) { e ->
                     val site = runCatching { Site.valueOf(e.site) }.getOrDefault(Site.EHENTAI)
                     Row(
                         modifier = Modifier
