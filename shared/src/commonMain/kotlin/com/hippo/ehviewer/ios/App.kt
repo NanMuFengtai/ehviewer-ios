@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,10 +20,15 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.hippo.ehviewer.ios.source.Site
+import com.hippo.ehviewer.ios.store.Account
+import com.hippo.ehviewer.ios.store.Prefs
 import com.hippo.ehviewer.ios.ui.DetailScreen
+import com.hippo.ehviewer.ios.ui.HistoryScreen
 import com.hippo.ehviewer.ios.ui.HomeScreen
+import com.hippo.ehviewer.ios.ui.LoginScreen
 import com.hippo.ehviewer.ios.ui.PageRef
 import com.hippo.ehviewer.ios.ui.ReaderScreen
+import com.hippo.ehviewer.ios.ui.SettingsScreen
 
 sealed interface Route {
     data object Home : Route
@@ -33,10 +39,16 @@ sealed interface Route {
         val title: String,
         val pages: List<PageRef>,
     ) : Route
+
+    data object Login : Route
+    data object Settings : Route
+    data object History : Route
 }
 
 @Composable
 fun App() {
+    Account.load()
+
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components { add(KtorNetworkFetcherFactory()) }
@@ -44,15 +56,23 @@ fun App() {
             .build()
     }
 
-    MaterialTheme(colorScheme = lightColorScheme()) {
+    var dark by remember { mutableStateOf(Prefs.getString("theme.dark") == "1") }
+
+    MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            AppNavigation()
+            AppNavigation(dark) { value ->
+                dark = value
+                Prefs.putString("theme.dark", if (value) "1" else "0")
+            }
         }
     }
 }
 
 @Composable
-private fun AppNavigation() {
+private fun AppNavigation(
+    darkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+) {
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     var site by remember { mutableStateOf(Site.EHENTAI) }
 
@@ -70,6 +90,7 @@ private fun AppNavigation() {
                 site = site,
                 onSwitchSite = { site = it },
                 onOpenDetail = { s, id, token, title -> push(Route.Detail(s, id, token, title)) },
+                onOpenSettings = { push(Route.Settings) },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
             )
 
@@ -89,6 +110,26 @@ private fun AppNavigation() {
                 title = route.title,
                 pages = route.pages,
                 onBack = { pop() },
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+            )
+
+            is Route.Login -> LoginScreen(
+                onBack = { pop() },
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+            )
+
+            is Route.Settings -> SettingsScreen(
+                darkTheme = darkTheme,
+                onDarkThemeChange = onDarkThemeChange,
+                onOpenLogin = { push(Route.Login) },
+                onOpenHistory = { push(Route.History) },
+                onBack = { pop() },
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+            )
+
+            is Route.History -> HistoryScreen(
+                onBack = { pop() },
+                onOpen = { s, id, token, title -> push(Route.Detail(s, id, token, title)) },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
             )
         }
