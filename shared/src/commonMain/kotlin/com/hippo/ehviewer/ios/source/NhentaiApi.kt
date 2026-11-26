@@ -23,14 +23,20 @@ object NhentaiApi {
     const val SORT_DATE = "date"
     const val SORT_POPULAR = "popular"
 
+    /** 登录后的 access token，接口用 Authorization: User <token>。 */
+    var token: String = ""
+
+    private fun authHeaders(): Map<String, String> =
+        if (token.isBlank()) emptyMap() else mapOf("Authorization" to "User $token")
+
     suspend fun list(page: Int, perPage: Int = PER_PAGE): PagedGalleries =
         AppJson.decodeFromString(
-            getText("$BASE/api/v2/galleries", page, mapOf("per_page" to "$perPage")),
+            getText("$BASE/api/v2/galleries", page, mapOf("per_page" to "$perPage"), authHeaders()),
         )
 
     suspend fun search(query: String, page: Int, sort: String = SORT_DATE): PagedGalleries =
         AppJson.decodeFromString(
-            getText("$BASE/api/v2/search", page, mapOf("query" to query, "sort" to sort)),
+            getText("$BASE/api/v2/search", page, mapOf("query" to query, "sort" to sort), authHeaders()),
         )
 
     suspend fun tagged(tagId: Long, page: Int, sort: String = SORT_DATE): PagedGalleries =
