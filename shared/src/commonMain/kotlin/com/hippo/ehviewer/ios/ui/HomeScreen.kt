@@ -72,6 +72,7 @@ fun HomeScreen(
     var endReached by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    var showFavorites by remember { mutableStateOf(false) }
     var searchInput by remember { mutableStateOf("") }
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
@@ -81,6 +82,39 @@ fun HomeScreen(
         loading = true
         error = null
         runCatching {
+            if (showFavorites) {
+                return@runCatching when (site) {
+                    Site.EHENTAI -> {
+                        val r = EhSource.favorites(target)
+                        r.items.map { g ->
+                            ListEntry(
+                                g.gid, g.token, g.title, g.thumbUrl, g.pages,
+                                "${g.pages}页" + if (g.rating > 0) " · ${g.rating.oneDecimal()}星" else "",
+                            )
+                        } to (r.next == null)
+                    }
+                    Site.NHENTAI -> {
+                        NhentaiCdn.refresh()
+                        val r = NhentaiApi.favorites(target + 1, com.hippo.ehviewer.ios.store.Account.nhToken)
+                        r.result.map { g ->
+                            ListEntry(
+                                g.id, "", g.title, NhentaiCdn.thumb(g.thumbnail), g.num_pages,
+                                "${g.num_pages}页 · ${g.num_favorites}收藏",
+                            )
+                        } to (target + 1 >= r.num_pages || r.result.isEmpty())
+                    }
+                    Site.JMCOMIC -> {
+                        val r = JmSource.favorites(target + 1)
+                        r.content.map { g ->
+                            ListEntry(
+                                g.albumId, "", g.name.ifBlank { "#${g.albumId}" },
+                                JmSource.coverUrl(g.albumId), 0,
+                                g.author.ifBlank { g.category.title },
+                            )
+                        } to r.content.isEmpty()
+                    }
+                }
+            }
             when (site) {
                 Site.EHENTAI -> {
                     val r = EhSource.list(target, query.takeIf { it.isNotBlank() })
@@ -148,7 +182,7 @@ fun HomeScreen(
         loading = false
     }
 
-    LaunchedEffect(site, query) {
+    LaunchedEffect(site, query, showFavorites) {
         entries.clear()
         pageIndex = 0
         endReached = false
@@ -156,7 +190,7 @@ fun HomeScreen(
         load(0, reset = true)
     }
 
-    LaunchedEffect(gridState, site, query) {
+    LaunchedEffect(gridState, site, query, showFavorites) {
         snapshotFlow {
             val info = gridState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -175,6 +209,10 @@ fun HomeScreen(
                 TopAppBar(
                     title = { Text("很太之家", style = MaterialTheme.typography.titleLarge) },
                     actions = {
+                        TextButton(
+                            onClick = { showFavorites = !showFavorites },
+                            enabled = !loading,
+                        ) { Text(if (showFavorites) "列表" else "收藏") }
                         TextButton(onClick = { scope.launch { load(0, true) } }, enabled = !loading) {
                             Text("刷新")
                         }
