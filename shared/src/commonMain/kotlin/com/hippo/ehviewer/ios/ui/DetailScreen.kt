@@ -76,6 +76,8 @@ fun DetailScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
+    var favorited by remember { mutableStateOf(false) }
+    var favBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(site, galleryId) {
         loading = true
@@ -204,8 +206,32 @@ fun DetailScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.End,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        androidx.compose.material3.OutlinedButton(
+                            enabled = !favBusy,
+                            onClick = {
+                                favBusy = true
+                                scope.launch {
+                                    runCatching {
+                                        when (site) {
+                                            Site.EHENTAI -> EhSource.addFavorite(galleryId, token)
+                                            Site.NHENTAI -> NhentaiApi.setFavorite(galleryId, !favorited)
+                                            Site.JMCOMIC -> JmSource.setFavorite(galleryId, !favorited)
+                                        }
+                                    }.onSuccess { ok ->
+                                        if (ok) {
+                                            favorited = !favorited
+                                            error = null
+                                        } else {
+                                            error = "收藏失败，先登录"
+                                        }
+                                    }.onFailure { error = it.message ?: it.toString() }
+                                    favBusy = false
+                                }
+                            },
+                        ) { Text(if (favorited) "已收藏" else "收藏") }
                         Button(
                             onClick = {
                                 when {
