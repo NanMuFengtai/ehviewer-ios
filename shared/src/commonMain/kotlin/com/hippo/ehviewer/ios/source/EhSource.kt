@@ -64,6 +64,9 @@ object EhSource {
     /** 登录 exhentai 后置 true。 */
     var useExHentai: Boolean = false
 
+    /** 登录后的 cookie，表站和里站都用它。 */
+    var cookie: String = ""
+
     val host: String get() = if (useExHentai) EX_BASE else EH_BASE
 
     private val tokenAndGid = Regex("""/(?:g|mpv)/(\d+)/([0-9a-f]{10})""")
@@ -75,6 +78,7 @@ object EhSource {
         val response = httpClient.get(url) {
             header("User-Agent", IOS_USER_AGENT)
             header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+            if (cookie.isNotBlank()) header("Cookie", cookie)
         }
         val text = response.bodyAsText()
         if (!response.status.isSuccess()) {
