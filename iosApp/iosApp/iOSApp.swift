@@ -11,7 +11,7 @@ import Shared
 // UIFileSharingEnabled 已经打开，可以从「文件 → 我的 iPhone → 很太之家」取日志。
 
 private let kCrashLogName = "crash.log"
-private let kBuildTag = "1.15.22-release"
+private let kBuildTag = "1.15.23-ios15-release"
 private let kPathCap = 4096
 /// 预分配，signal handler 里不能再 malloc
 private let gCrashPath = UnsafeMutablePointer<CChar>.allocate(capacity: kPathCap)
@@ -136,7 +136,10 @@ struct CrashReportView: View {
     @State private var logText: String = CrashReportStore.report() ?? ""
 
     var body: some View {
-        NavigationStack {
+        // 用 NavigationView 而不是 NavigationStack：后者是 iOS 16 才有的 API，
+        // 部署目标降到 15.0 后编译期就不让用了，而且 iOS 15 设备上 NavigationStack
+        // 这个符号根本不存在，一进这个界面就崩。
+        NavigationView {
             ScrollView {
                 Text(logText)
                     .font(.system(size: 11, design: .monospaced))
@@ -158,6 +161,7 @@ struct CrashReportView: View {
                 .background(.regularMaterial)
             }
         }
+        .navigationViewStyle(.stack)
     }
 }
 
