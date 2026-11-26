@@ -30,7 +30,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.serialization.json)
             implementation(libs.ktor.client.core)
             implementation(project.dependencies.platform(libs.coil.bom))
             implementation(libs.coil.compose)
