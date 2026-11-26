@@ -139,11 +139,15 @@ object EhSource {
         }
         val thumbUrl = rawThumb?.let { normalizeThumb(it) } ?: ""
 
-        val (thumbHeight, thumbWidth) = thumbAttrs?.let { attrs ->
-            Regex("""height:(\d+)px;width:(\d+)px""").find(attrs)?.let {
-                it.groupValues[1].toIntOrNull() ?: 0 to it.groupValues[2].toIntOrNull() ?: 0
+        val thumbSize: Pair<Int, Int> = thumbAttrs?.let { attrs ->
+            Regex("""height:(\d+)px;width:(\d+)px""").find(attrs)?.let { m ->
+                val h = m.groupValues[1].toIntOrNull() ?: 0
+                val w = m.groupValues[2].toIntOrNull() ?: 0
+                h to w
             } ?: (0 to 0)
         } ?: (0 to 0)
+        val thumbHeight = thumbSize.first
+        val thumbWidth = thumbSize.second
 
         val categoryText = Html.firstByClass(row.inner, "cn")?.text()
             ?: Html.firstByClass(row.inner, "cs")?.text()
