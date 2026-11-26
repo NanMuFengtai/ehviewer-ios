@@ -17,4 +17,6 @@ data class ListEntry(
     val thumb: String,
     val pages: Int,
     val meta: String,
+    val category: Int = 0,
+    val language: String? = null,
 )
