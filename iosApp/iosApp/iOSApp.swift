@@ -11,7 +11,7 @@ import Shared
 // UIFileSharingEnabled 已经打开，可以从「文件 → 我的 iPhone → 很太之家」取日志。
 
 private let kCrashLogName = "crash.log"
-private let kBuildTag = "1.15.23-ios15-release"
+private let kBuildTag = "1.15.24-diag"
 private let kPathCap = 4096
 /// 预分配，signal handler 里不能再 malloc
 private let gCrashPath = UnsafeMutablePointer<CChar>.allocate(capacity: kPathCap)
@@ -41,6 +41,20 @@ private func appendRaw(_ text: String) {
     close(fd)
 }
 
+/// 信号处理器里把原生调用栈也写进日志。SIGABRT 时能看到 abort() 的调用者。
+/// 只写地址，符号化要靠本地这份没被 strip 的二进制对照。
+private func dumpBacktrace() {
+    var callstack = [UnsafeMutableRawPointer?](repeating: nil, count: 128)
+    callstack.withUnsafeMutableBufferPointer { buf in
+        guard let base = buf.baseAddress else { return }
+        let frames = backtrace(base, Int32(buf.count))
+        let fd = open(gCrashPath, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        guard fd >= 0 else { return }
+        backtrace_symbols_fd(base, frames, fd)
+        close(fd)
+    }
+}
+
 private func handleFatalSignal(_ sig: Int32) {
     let name: String
     switch sig {
@@ -53,6 +67,7 @@ private func handleFatalSignal(_ sig: Int32) {
     default:      name = "signal \(sig)"
     }
     appendRaw("\n=== 崩溃信号 \(name) ===\n")
+    dumpBacktrace()
     signal(sig, SIG_DFL)
     raise(sig)
 }
@@ -170,8 +185,13 @@ struct CrashReportView: View {
 /// 把 Kotlin 侧 Compose 生成的 UIViewController 塞进 SwiftUI。
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
-        MainViewControllerKt.MainViewController()
+        appendRaw("[swift] 即将调用 MainViewControllerKt.MainViewController()")
+        let controller = MainViewControllerKt.MainViewController()
+        appendRaw("[swift] MainViewController 已返回")
+        return controller
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        appendRaw("[swift] updateUIViewController 调用")
+    }
 }
