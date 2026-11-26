@@ -64,6 +64,8 @@ fun HomeScreen(
     onSwitchSite: (Site) -> Unit,
     onOpenDetail: (Site, Long, String, String) -> Unit,
     onOpenSettings: () -> Unit,
+    searchSeq: Int = 0,
+    searchText: String = "",
     modifier: Modifier = Modifier,
 ) {
     val entries = remember { mutableStateListOf<ListEntry>() }
@@ -180,6 +182,14 @@ fun HomeScreen(
             endReached = end
         }.onFailure { error = it.message ?: it.toString() }
         loading = false
+    }
+
+    LaunchedEffect(searchSeq) {
+        if (searchSeq > 0 && searchText.isNotBlank()) {
+            searchInput = searchText
+            query = searchText
+            showFavorites = false
+        }
     }
 
     LaunchedEffect(site, query, showFavorites) {
