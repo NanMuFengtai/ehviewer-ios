@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "com.hippo.ehviewer.ios.generated.resources"
+}
+
 kotlin {
     // iOS 目标只能在 macOS 上编译，所以用和 core 模块同一个开关控制
     if (providers.gradleProperty("enableIosTargets").isPresent) {
@@ -29,6 +34,8 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(compose.components.resources)
+            implementation(compose.materialIconsExtended)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.serialization.json)
             implementation(libs.ktor.client.core)
