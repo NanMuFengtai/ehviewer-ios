@@ -40,7 +40,7 @@ fun App() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "1.15.23 · iOS 15.0+",
+                    text = "1.15.24 · iOS 15.0+",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
