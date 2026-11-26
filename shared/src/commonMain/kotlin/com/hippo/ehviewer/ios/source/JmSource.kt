@@ -213,6 +213,9 @@ object JmSource {
         return AppJson.decodeFromString(getJson("/categories/filter", params))
     }
 
+    suspend fun favorites(page: Int): PageModel =
+        AppJson.decodeFromString(getJson("/favorite", mapOf("page" to "$page")))
+
     suspend fun album(albumId: Long): Album =
         AppJson.decodeFromString(getJson("/album", mapOf("id" to "$albumId")))
 
