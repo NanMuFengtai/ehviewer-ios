@@ -5,9 +5,11 @@ import com.hippo.ehviewer.ios.crypto.Md5
 import com.hippo.ehviewer.ios.net.AppJson
 import com.hippo.ehviewer.ios.net.NetException
 import com.hippo.ehviewer.ios.net.httpClient
+import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Parameters
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -117,6 +119,48 @@ object JmSource {
             }
         }
         throw last ?: NetException("禁漫接口不可用")
+    }
+
+    private suspend fun postJson(path: String, form: Map<String, String>): String {
+        var last: Throwable? = null
+        for (host in hosts) {
+            try {
+                val ts = nowSeconds()
+                val token = tokenFor(ts)
+                val response = httpClient.submitForm(
+                    url = "https://$host$path",
+                    formParameters = Parameters.build {
+                        form.forEach { (k, v) -> append(k, v) }
+                    },
+                ) {
+                    header("User-Agent", UA)
+                    header("token", token)
+                    header("tokenparam", "$ts,$APP_VERSION")
+                    header("Accept", "application/json")
+                    if (cookie.isNotBlank()) header("Cookie", cookie)
+                }
+                val text = response.bodyAsText()
+                if (!response.status.isSuccess()) throw NetException("HTTP ${response.status.value}")
+                val data = envelopePayload(text) ?: return "{}"
+                return decrypt(data, ts)
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                last = t
+            }
+        }
+        throw last ?: NetException("禁漫接口不可用")
+    }
+
+    /** 收藏 / 取消收藏。接口是 POST 表单，返回里带新的收藏状态。 */
+    suspend fun setFavorite(albumId: Long, favorited: Boolean): Boolean {
+        val text = postJson("/favorite", mapOf("aid" to "$albumId"))
+        val obj = runCatching {
+            AppJson.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject
+        }.getOrNull() ?: return favorited
+        val state = obj["is_favorite"]?.let {
+            (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+        }
+        return state ?: favorited
     }
 
     @Serializable
