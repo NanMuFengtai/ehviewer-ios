@@ -1,16 +1,19 @@
 package com.hippo.ehviewer.ios.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -25,7 +28,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -37,60 +39,103 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.hippo.ehviewer.ios.source.EhSource
+import com.hippo.ehviewer.ios.source.ListEntry
 import com.hippo.ehviewer.ios.source.NhentaiApi
 import com.hippo.ehviewer.ios.source.NhentaiCdn
-import kotlinx.coroutines.flow.distinctUntilChanged
+import com.hippo.ehviewer.ios.source.Site
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onOpenDetail: (Long, String) -> Unit,
+    site: Site,
+    onSwitchSite: (Site) -> Unit,
+    onOpenDetail: (Site, Long, String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val items = remember { mutableStateListOf<NhentaiApi.GalleryItem>() }
-    var page by remember { mutableIntStateOf(1) }
+    val entries = remember { mutableStateListOf<ListEntry>() }
+    var pageIndex by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(false) }
     var endReached by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
-    suspend fun load(target: Int) {
+    suspend fun load(target: Int, reset: Boolean) {
         if (loading) return
         loading = true
         error = null
         runCatching {
-            NhentaiCdn.refresh()
-            NhentaiApi.list(target)
-        }.onSuccess { paged ->
-            if (target == 1) items.clear()
-            items.addAll(paged.result)
-            page = target
-            endReached = paged.result.isEmpty() || target >= paged.num_pages
+            when (site) {
+                Site.EHENTAI -> {
+                    val r = EhSource.list(target)
+                    r.items.map { g ->
+                        ListEntry(
+                            id = g.gid,
+                            token = g.token,
+                            title = g.title,
+                            thumb = g.thumbUrl,
+                            pages = g.pages,
+                            meta = buildString {
+                                g.uploader?.let { append(it).append(" · ") }
+                                append("${g.pages}页")
+                                if (g.rating > 0) append(" · ${g.rating.oneDecimal()}星")
+                            },
+                        )
+                    } to (r.next == null)
+                }
+
+                Site.NHENTAI -> {
+                    NhentaiCdn.refresh()
+                    val r = NhentaiApi.list(target + 1)
+                    r.result.map { g ->
+                        ListEntry(
+                            id = g.id,
+                            token = "",
+                            title = g.title,
+                            thumb = NhentaiCdn.thumb(g.thumbnail),
+                            pages = g.num_pages,
+                            meta = "${g.num_pages}页 · ${g.num_favorites}收藏",
+                        )
+                    } to (target + 1 >= r.num_pages || r.result.isEmpty())
+                }
+
+                Site.JMCOMIC -> emptyList<ListEntry>() to true
+            }
+        }.onSuccess { (list, end) ->
+            if (reset) entries.clear()
+            entries.addAll(list)
+            pageIndex = target
+            endReached = end
         }.onFailure {
             error = it.message ?: it.toString()
         }
         loading = false
     }
 
-    LaunchedEffect(Unit) {
-        if (items.isEmpty()) load(1)
+    LaunchedEffect(site) {
+        entries.clear()
+        pageIndex = 0
+        endReached = false
+        error = null
+        load(0, reset = true)
     }
 
-    // 滚到接近末尾就自动拉下一页
-    LaunchedEffect(gridState) {
+    LaunchedEffect(gridState, site) {
         snapshotFlow {
             val info = gridState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
             last >= info.totalItemsCount - 6 && info.totalItemsCount > 0
-        }.distinctUntilChanged().collect { nearEnd ->
-            if (nearEnd && !loading && !endReached && items.isNotEmpty()) {
-                load(page + 1)
+        }.collect { nearEnd ->
+            if (nearEnd && !loading && !endReached && entries.isNotEmpty()) {
+                load(pageIndex + 1, reset = false)
             }
         }
     }
@@ -98,30 +143,29 @@ fun HomeScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
+            Column {
+                TopAppBar(
+                    title = {
                         Text("很太之家", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "nhentai · 第 $page 页",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { scope.launch { load(1) } }, enabled = !loading) {
-                        Text("刷新")
-                    }
-                },
-            )
+                    },
+                    actions = {
+                        TextButton(onClick = { scope.launch { load(0, true) } }, enabled = !loading) {
+                            Text("刷新")
+                        }
+                    },
+                )
+                SiteTabs(current = site, onSelect = onSwitchSite)
+            }
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
-                items.isEmpty() && loading -> CenterProgress()
-                items.isEmpty() && error != null -> ErrorPane(error!!) { scope.launch { load(1) } }
-                items.isEmpty() -> EmptyPane()
+                entries.isEmpty() && loading -> CenterProgress()
+                entries.isEmpty() && error != null -> ErrorPane(error!!) {
+                    scope.launch { load(0, true) }
+                }
+                entries.isEmpty() && !endReached -> CenterProgress()
+                entries.isEmpty() -> EmptyPane()
                 else -> LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Fixed(2),
@@ -130,11 +174,13 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(items, key = { it.id }) { item ->
-                        GalleryCard(item) { onOpenDetail(item.id, item.title) }
+                    items(entries, key = { "${site.name}-${it.id}" }) { item ->
+                        GalleryCard(site, item) {
+                            onOpenDetail(site, item.id, item.token, item.title)
+                        }
                     }
                     if (loading) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                        item(span = { GridItemSpan(2) }) {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 contentAlignment = Alignment.Center,
@@ -148,16 +194,46 @@ fun HomeScreen(
 }
 
 @Composable
-private fun GalleryCard(item: NhentaiApi.GalleryItem, onClick: () -> Unit) {
+private fun SiteTabs(current: Site, onSelect: (Site) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Site.entries.forEach { s ->
+            val selected = s == current
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (selected) s.accent.copy(alpha = 0.18f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    )
+                    .clickable { onSelect(s) }
+                    .padding(horizontal = 16.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    text = s.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (selected) s.accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GalleryCard(site: Site, item: ListEntry, onClick: () -> Unit) {
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         AsyncImage(
-            model = NhentaiCdn.thumb(item.thumbnail),
+            model = item.thumb,
             contentDescription = item.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.72f)
-                .clip(RoundedCornerShape(10.dp)),
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
         )
         Text(
             text = item.title,
@@ -167,9 +243,11 @@ private fun GalleryCard(item: NhentaiApi.GalleryItem, onClick: () -> Unit) {
             modifier = Modifier.padding(top = 6.dp),
         )
         Text(
-            text = "${item.num_pages} 页 · ${item.num_favorites} 收藏",
+            text = item.meta,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -202,4 +280,10 @@ private fun EmptyPane() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("没有内容", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** 保留一位小数，Kotlin/Native 上没有 String.format。 */
+private fun Float.oneDecimal(): String {
+    val i = (this * 10).toInt()
+    return "${i / 10}.${i % 10}"
 }
