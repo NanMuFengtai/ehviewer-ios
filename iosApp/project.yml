@@ -2,12 +2,12 @@ name: iosApp
 options:
   bundleIdPrefix: moe.tarsin
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "15.0"
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: "NO"
     # 先出未签名包，签名由使用者自己用工具重签
