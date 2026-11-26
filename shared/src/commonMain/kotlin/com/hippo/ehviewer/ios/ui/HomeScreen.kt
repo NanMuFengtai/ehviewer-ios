@@ -281,9 +281,3 @@ private fun EmptyPane() {
         Text("没有内容", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
-/** 保留一位小数，Kotlin/Native 上没有 String.format。 */
-private fun Float.oneDecimal(): String {
-    val i = (this * 10).toInt()
-    return "${i / 10}.${i % 10}"
-}
