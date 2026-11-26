@@ -25,6 +25,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +39,7 @@ import coil3.compose.AsyncImage
 import com.hippo.ehviewer.ios.source.Site
 import com.hippo.ehviewer.ios.store.Account
 import com.hippo.ehviewer.ios.store.HistoryStore
+import com.hippo.ehviewer.ios.store.Prefs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +79,25 @@ fun SettingsScreen(
             SectionTitle("浏览")
             SettingRow("阅读记录") { onOpenHistory() }
             SettingRow("清空阅读记录") { HistoryStore.clear() }
+
+            HorizontalDivider()
+
+            SectionTitle("阅读器")
+            var horizontal by remember { mutableStateOf(Prefs.getString("reader.horizontal") == "1") }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("横向翻页", style = MaterialTheme.typography.bodyLarge)
+                Switch(
+                    checked = horizontal,
+                    onCheckedChange = {
+                        horizontal = it
+                        Prefs.putString("reader.horizontal", if (it) "1" else "0")
+                    },
+                )
+            }
 
             HorizontalDivider()
 
