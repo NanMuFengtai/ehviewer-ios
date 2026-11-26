@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +33,9 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      - name: Build Kotlin framework
-        run: ./gradlew :shared:linkDebugFrameworkIosArm64 -PenableIosTargets=true -PciBuild --no-daemon --stacktrace
+      # Release framework：Debug 的产物会把代码拆进 debug dylib，真机自签必闪退
+      - name: Build Kotlin framework (release)
+        run: ./gradlew :shared:linkReleaseFrameworkIosArm64 -PenableIosTargets=true -PciBuild --no-daemon --stacktrace
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -42,25 +43,62 @@ jobs:
       - name: Generate Xcode project
         run: cd iosApp && xcodegen generate
 
-      - name: Build app
+      - name: Build app (Release)
         run: |
           cd iosApp
           xcodebuild \
             -project iosApp.xcodeproj \
             -scheme iosApp \
-            -configuration Debug \
+            -configuration Release \
             -sdk iphoneos \
             -destination generic/platform=iOS \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            ENABLE_DEBUG_DYLIB=NO ENABLE_PREVIEWS=NO \
             build
 
       - name: Package unsigned ipa
         run: |
+          set -euo pipefail
+          APP="iosApp/build/Build/Products/Release-iphoneos/EhViewer.app"
+          test -d "$APP" || { echo "no app bundle at $APP"; ls -R iosApp/build/Build/Products || true; exit 1; }
+
+          # Debug 构建时代的残留一律不许进包
+          rm -f "$APP/__preview.dylib"
+          rm -f "$APP"/*.debug.dylib
+
+          echo "--- bundle contents ---"
+          ls -la "$APP"
+
+          # 硬性体检：主二进制必须是完整可执行文件而不是 71KB 的 stub，
+          # 且不能还挂着 @rpath/*.debug.dylib
+          SZ=$(stat -f%z "$APP/EhViewer")
+          echo "main binary = $SZ bytes"
+          if [ "$SZ" -lt 5000000 ]; then
+            echo "::error::main binary only $SZ bytes - ENABLE_DEBUG_DYLIB still on"
+            exit 1
+          fi
+          if otool -L "$APP/EhViewer" | grep -q 'debug\.dylib'; then
+            echo "::error::main binary still links a debug dylib"
+            otool -L "$APP/EhViewer"
+            exit 1
+          fi
+          if ls "$APP"/*.debug.dylib >/dev/null 2>&1; then
+            echo "::error::debug dylib still present"
+            exit 1
+          fi
+
+          echo "--- linked libraries ---"
+          otool -L "$APP/EhViewer"
+
           mkdir -p Payload
-          cp -R iosApp/build/Build/Products/Debug-iphoneos/EhViewer.app Payload/
+          cp -R "$APP" Payload/
+          # 只 zip 内容，不带 Payload 目录本身之外的杂物
+          rm -f ehviewer-ios-unsigned.ipa
           zip -qry ehviewer-ios-unsigned.ipa Payload
           ls -lh ehviewer-ios-unsigned.ipa
+          echo "--- ipa contents ---"
+          unzip -l ehviewer-ios-unsigned.ipa
 
       - uses: actions/upload-artifact@v4
         with:
