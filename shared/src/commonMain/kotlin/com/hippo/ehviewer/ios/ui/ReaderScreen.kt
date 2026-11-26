@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.hippo.ehviewer.ios.source.EhSource
 import com.hippo.ehviewer.ios.source.Site
+import com.hippo.ehviewer.ios.store.Prefs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -50,6 +53,18 @@ fun ReaderScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 进度记忆：下次打开直接跳到上次位置
+    val progressKey = "progress.${site.name}.$galleryId"
+    val startPage = remember(galleryId) {
+        Prefs.getString(progressKey)?.toIntOrNull()?.coerceIn(0, (pages.size - 1).coerceAtLeast(0)) ?: 0
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startPage)
+    LaunchedEffect(listState, progressKey) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
+            Prefs.putString(progressKey, "$index")
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = Color(0xFF111111),
@@ -66,7 +81,7 @@ fun ReaderScreen(
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding)) {
             itemsIndexed(pages) { index, page ->
                 if (page.isPageUrl) {
                     EhPageView(index, page.url)
