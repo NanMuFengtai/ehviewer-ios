@@ -7,6 +7,9 @@ import com.hippo.ehviewer.ios.util.Html
 import com.hippo.ehviewer.ios.util.HtmlTag
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 
@@ -369,6 +372,22 @@ object EhSource {
             }
         }
         return result.take(30)
+    }
+
+    /** 加入默认收藏夹。需要登录。 */
+    suspend fun addFavorite(gid: Long, token: String): Boolean {
+        if (cookie.isBlank()) return false
+        val response = httpClient.request("$host/gallerypopups.php") {
+            method = io.ktor.http.HttpMethod.Post
+            parameter("gid", gid)
+            parameter("t", token)
+            parameter("act", "addfav")
+            header("User-Agent", IOS_USER_AGENT)
+            header("Cookie", cookie)
+            header("Content-Type", "application/x-www-form-urlencoded")
+            setBody("favcat=0&favnote=&apply=Add+to+Favorites")
+        }
+        return response.status.isSuccess()
     }
 
     // ---------- 阅读器 ----------
