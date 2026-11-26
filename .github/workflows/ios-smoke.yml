@@ -1,0 +1,127 @@
+name: iOS Simulator Smoke
+
+# 真机上闪退拿不到堆栈，就在 CI 的 iOS 模拟器里跑一遍：
+# 启动 app，抓进程日志和崩溃报告。模拟器能复现就走模拟器这条线定位。
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios]
+
+jobs:
+  smoke:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Select Xcode 26
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app || sudo xcode-select -s /Applications/Xcode_26.2.app || sudo xcode-select -s /Applications/Xcode_26.0.app
+          xcodebuild -version
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: ${{ runner.os }}-gradle-sim-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build Kotlin framework (simulator arm64)
+        run: ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 -PenableIosTargets=true -PciBuild --no-daemon --stacktrace
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: cd iosApp && xcodegen generate
+
+      - name: Build app for simulator
+        run: |
+          set -euo pipefail
+          cd iosApp
+          xcodebuild \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="-" \
+            FRAMEWORK_SEARCH_PATHS="$(pwd)/../shared/build/bin/iosSimulatorArm64/debugFramework" \
+            OTHER_LDFLAGS="-framework Shared" \
+            build
+          APP=build/Build/Products/Debug-iphonesimulator/EhViewer.app
+          test -d "$APP"
+          ls -la "$APP"
+
+      - name: Run on simulator and capture crash
+        run: |
+          set -uo pipefail
+          APP="$(pwd)/iosApp/build/Build/Products/Debug-iphonesimulator/EhViewer.app"
+
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          cands=[x for k in d for x in d[k] if x['name'].startswith('iPhone')]
+          print(cands[0]['udid'])
+          ")
+          echo "device=$UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b || true
+          xcrun simctl install "$UDID" "$APP"
+
+          # 给进程日志开一个抓取通道
+          xcrun simctl spawn "$UDID" log stream --level debug --predicate 'process == "EhViewer"' > sim-log.txt 2>&1 &
+          LOGPID=$!
+          sleep 3
+
+          echo "--- launch ---"
+          xcrun simctl launch "$UDID" moe.tarsin.ehviewer || echo "launch returned non-zero"
+          sleep 25
+
+          echo "--- still running? ---"
+          if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q moe.tarsin.ehviewer; then
+            echo "PROCESS_ALIVE"
+          else
+            echo "PROCESS_GONE"
+          fi
+
+          # 截一张图看渲染到哪一步
+          xcrun simctl io "$UDID" screenshot sim-shot.png || true
+
+          kill "$LOGPID" 2>/dev/null || true
+          sleep 1
+          echo "--- app log (tail 200) ---"
+          tail -200 sim-log.txt || true
+
+          echo "--- crash reports in simulator ---"
+          find ~/Library/Logs/DiagnosticReports -name 'EhViewer*' -newermt '-10 minutes' -print 2>/dev/null || true
+          find ~/Library/Developer/CoreSimulator/Devices/"$UDID" -name 'EhViewer*.ips' -newermt '-10 minutes' -print 2>/dev/null || true
+
+          mkdir -p artifacts
+          cp sim-log.txt artifacts/ 2>/dev/null || true
+          cp sim-shot.png artifacts/ 2>/dev/null || true
+          for f in $(find ~/Library/Logs/DiagnosticReports -name 'EhViewer*' -newermt '-10 minutes' 2>/dev/null); do
+            cp "$f" artifacts/ || true
+          done
+          for f in $(find ~/Library/Developer/CoreSimulator/Devices/"$UDID" -name 'EhViewer*.ips' -newermt '-10 minutes' 2>/dev/null); do
+            cp "$f" artifacts/ || true
+          done
+          echo "--- artifacts ---"
+          ls -la artifacts/
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-crash-report
+          path: artifacts/
+          retention-days: 7
