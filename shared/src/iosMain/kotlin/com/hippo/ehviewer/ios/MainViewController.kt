@@ -1,4 +1,7 @@
-@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class)
+@file:OptIn(
+    kotlin.experimental.ExperimentalNativeApi::class,
+    kotlinx.cinterop.ExperimentalForeignApi::class,
+)
 
 package com.hippo.ehviewer.ios
 
