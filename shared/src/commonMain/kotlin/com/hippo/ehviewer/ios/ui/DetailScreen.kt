@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,9 +39,11 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.hippo.ehviewer.ios.source.EhDetail
 import com.hippo.ehviewer.ios.source.EhSource
+import com.hippo.ehviewer.ios.source.JmSource
 import com.hippo.ehviewer.ios.source.NhentaiApi
 import com.hippo.ehviewer.ios.source.NhentaiCdn
 import com.hippo.ehviewer.ios.source.Site
+import kotlinx.coroutines.launch
 
 /**
  * 阅读器的一页。
@@ -67,8 +70,10 @@ fun DetailScreen(
 ) {
     var eh by remember { mutableStateOf<EhDetail?>(null) }
     var nh by remember { mutableStateOf<NhentaiApi.Detail?>(null) }
+    var jm by remember { mutableStateOf<JmSource.Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(site, galleryId) {
         loading = true
@@ -80,18 +85,25 @@ fun DetailScreen(
                     NhentaiCdn.refresh()
                     nh = NhentaiApi.detail(galleryId)
                 }
-                Site.JMCOMIC -> error = "禁漫还没接"
+                Site.JMCOMIC -> jm = JmSource.album(galleryId)
             }
         }.onFailure { error = it.message ?: it.toString() }
         loading = false
     }
 
-    val title = eh?.item?.title ?: nh?.displayTitle ?: fallbackTitle
-    val cover = eh?.item?.thumbUrl ?: nh?.let { NhentaiCdn.image(it.cover.path) } ?: ""
-    val pageCount = eh?.item?.pages ?: nh?.num_pages ?: 0
+    val title = eh?.item?.title ?: nh?.displayTitle ?: jm?.name?.ifBlank { fallbackTitle } ?: fallbackTitle
+    val cover = eh?.item?.thumbUrl
+        ?: nh?.let { NhentaiCdn.image(it.cover.path) }
+        ?: jm?.let { JmSource.coverUrl(it.albumId) }
+        ?: ""
+    val pageCount = eh?.item?.pages ?: nh?.num_pages ?: jm?.pageCount ?: 0
     val tagGroups: List<Pair<String, List<Pair<String, String>>>> = when {
         eh != null -> eh!!.tagGroups.map { (ns, tags) -> ns to tags.map { it.namespace to it.name } }
         nh != null -> listOf("tag" to nh!!.tags.map { it.type to it.name })
+        jm != null -> listOf(
+            "author" to jm!!.author.map { "author" to it },
+            "tag" to jm!!.tags.map { "tag" to it },
+        ).filter { it.second.isNotEmpty() }
         else -> emptyList()
     }
 
@@ -139,6 +151,10 @@ fun DetailScreen(
                             MetaChip("${d.num_favorites} 收藏")
                             d.scanlator?.takeIf { it.isNotBlank() }?.let { MetaChip(it) }
                         }
+                        jm?.let { d ->
+                            if (d.authorText.isNotBlank()) MetaChip(d.authorText)
+                            if (d.likes.isNotBlank()) MetaChip("${d.likes} 喜欢")
+                        }
                     }
 
                     if (tagGroups.isNotEmpty()) {
@@ -151,16 +167,53 @@ fun DetailScreen(
                     ) {
                         Button(
                             onClick = {
-                                val pages: List<PageRef> = when {
-                                    eh != null -> eh!!.previews.map {
-                                        PageRef(it.pageUrl, 0, 0, isPageUrl = true)
+                                when {
+                                    eh != null -> {
+                                        val pages = eh!!.previews.map {
+                                            PageRef(it.pageUrl, 0, 0, isPageUrl = true)
+                                        }
+                                        if (pages.isNotEmpty()) {
+                                            onRead(site, galleryId, title, pages)
+                                        }
                                     }
-                                    nh != null -> nh!!.pages.map {
-                                        PageRef(NhentaiCdn.image(it.path), it.width, it.height)
+
+                                    nh != null -> {
+                                        val pages = nh!!.pages.map {
+                                            PageRef(NhentaiCdn.image(it.path), it.width, it.height)
+                                        }
+                                        if (pages.isNotEmpty()) {
+                                            onRead(site, galleryId, title, pages)
+                                        }
                                     }
-                                    else -> emptyList()
+
+                                    jm != null -> {
+                                        val album = jm!!
+                                        scope.launch {
+                                            // 多话本取第一话，单话本直接用专辑 id 当章节 id
+                                            val chapterId =
+                                                album.series.firstOrNull()?.chapterId
+                                                    ?: album.albumId
+                                            runCatching { JmSource.chapter(chapterId) }
+                                                .onSuccess { cp ->
+                                                    val refs = cp.images.map { file ->
+                                                        PageRef(
+                                                            JmSource.imageUrl(chapterId, file),
+                                                            0,
+                                                            0,
+                                                        )
+                                                    }
+                                                    if (refs.isNotEmpty()) {
+                                                        onRead(site, chapterId, album.name, refs)
+                                                    } else {
+                                                        error = "这一话没有图片"
+                                                    }
+                                                }
+                                                .onFailure {
+                                                    error = it.message ?: it.toString()
+                                                }
+                                        }
+                                    }
                                 }
-                                if (pages.isNotEmpty()) onRead(site, galleryId, title, pages)
                             },
                         ) { Text("开始阅读（$pageCount 页）") }
                     }
