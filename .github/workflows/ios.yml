@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "25"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -53,11 +53,11 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R iosApp/build/Build/Products/Debug-iphoneos/EhViewer.app Payload/
-          zip -qry 很太之家-ios-unsigned.ipa Payload
-          ls -lh 很太之家-ios-unsigned.ipa
+          zip -qry ehviewer-ios-unsigned.ipa Payload
+          ls -lh ehviewer-ios-unsigned.ipa
 
       - uses: actions/upload-artifact@v4
         with:
           name: ehviewer-ios-unsigned
-          path: 很太之家-ios-unsigned.ipa
+          path: ehviewer-ios-unsigned.ipa
           retention-days: 7
