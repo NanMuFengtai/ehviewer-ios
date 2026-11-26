@@ -101,6 +101,11 @@ jobs:
           echo "--- Mach-O build version ---"
           otool -l "$APP/EhViewer" | grep -A4 'LC_BUILD_VERSION' | grep -E 'platform|minos|sdk' || true
 
+          # 新版 SDK 的 cinterop 会把高版本系统的常量写成强引用，
+          # 低版本 iOS 启动时 dyld 解析不到直接 abort。这里逐个核对有没有 weak 兜底。
+          echo "--- 常量符号检查 ---"
+          python3 tools/check_ios_symbols.py "$APP/EhViewer"
+
           mkdir -p Payload
           cp -R "$APP" Payload/
           # 只 zip 内容，不带 Payload 目录本身之外的杂物
