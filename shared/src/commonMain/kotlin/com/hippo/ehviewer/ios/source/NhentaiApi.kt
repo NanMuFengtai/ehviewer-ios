@@ -57,6 +57,17 @@ object NhentaiApi {
 
     suspend fun cdn(): Cdn = AppJson.decodeFromString(getText("$BASE/api/v2/cdn"))
 
+    suspend fun setFavorite(id: Long, favorited: Boolean): Boolean {
+        if (token.isBlank()) return false
+        val (status, _) = requestText(
+            "$BASE/api/v2/galleries/$id/favorite",
+            method = HttpMethod.Post,
+            headers = authHeaders() + mapOf("Content-Type" to "application/json"),
+            body = """{"favorited":$favorited}""",
+        )
+        return status in 200..299
+    }
+
     suspend fun me(token: String): User {
         val (status, body) = requestText(
             "$BASE/api/v2/user",
