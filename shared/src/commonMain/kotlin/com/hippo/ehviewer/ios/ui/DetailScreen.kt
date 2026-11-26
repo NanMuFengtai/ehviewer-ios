@@ -1,6 +1,7 @@
 package com.hippo.ehviewer.ios.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +67,7 @@ fun DetailScreen(
     fallbackTitle: String,
     onBack: () -> Unit,
     onRead: (Site, Long, String, List<PageRef>) -> Unit,
+    onTagClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var eh by remember { mutableStateOf<EhDetail?>(null) }
@@ -158,7 +160,7 @@ fun DetailScreen(
                     }
 
                     if (tagGroups.isNotEmpty()) {
-                        TagFlow(tagGroups)
+                        TagFlow(tagGroups, onTagClick)
                     }
 
                     eh?.let { d ->
@@ -264,7 +266,10 @@ fun DetailScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagFlow(groups: List<Pair<String, List<Pair<String, String>>>>) {
+private fun TagFlow(
+    groups: List<Pair<String, List<Pair<String, String>>>>,
+    onTagClick: (String) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         groups.forEach { (ns, tags) ->
             Text(
@@ -276,7 +281,7 @@ private fun TagFlow(groups: List<Pair<String, List<Pair<String, String>>>>) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                tags.take(40).forEach { (t, name) -> TagPill(t, name) }
+                tags.take(40).forEach { (t, name) -> TagPill(t, name) { onTagClick(name) } }
             }
         }
     }
@@ -292,7 +297,7 @@ private fun MetaChip(text: String) {
 }
 
 @Composable
-private fun TagPill(type: String, name: String) {
+private fun TagPill(type: String, name: String, onClick: () -> Unit = {}) {
     val bg = when (type.lowercase()) {
         "language" -> Color(0xFF5B8DEF)
         "artist" -> Color(0xFFE0678A)
@@ -306,6 +311,7 @@ private fun TagPill(type: String, name: String) {
         modifier = Modifier
             .clip(RoundedCornerShape(50))
             .background(bg.copy(alpha = 0.16f))
+            .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(text = name, style = MaterialTheme.typography.labelSmall, color = bg)
