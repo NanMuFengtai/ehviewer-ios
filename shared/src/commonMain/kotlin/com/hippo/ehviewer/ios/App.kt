@@ -1,5 +1,6 @@
 package com.hippo.ehviewer.ios
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,17 +50,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
-import com.hippo.ehviewer.ios.generated.resources.Res
-import com.hippo.ehviewer.ios.generated.resources.sadpanda_low_poly
 import com.hippo.ehviewer.ios.source.Site
 import com.hippo.ehviewer.ios.store.Account
 import com.hippo.ehviewer.ios.store.Prefs
@@ -72,7 +72,6 @@ import com.hippo.ehviewer.ios.ui.PageRef
 import com.hippo.ehviewer.ios.ui.ReaderScreen
 import com.hippo.ehviewer.ios.ui.SettingsScreen
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.painterResource
 
 sealed interface Screen {
     data object Main : Screen
@@ -276,12 +275,7 @@ private fun DrawerPanel(
             )
             .verticalScroll(rememberScrollState()),
     ) {
-        androidx.compose.foundation.Image(
-            painter = painterResource(Res.drawable.sadpanda_low_poly),
-            contentDescription = null,
-            contentScale = ContentScale.FillWidth,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        )
+        PandaHeader()
 
         SiteCapsule(
             site = site,
@@ -356,3 +350,42 @@ private fun SiteCapsule(
 // 搜索请求通过这两个全局状态从详情页传回列表页
 private var searchSeq by mutableStateOf(0)
 private var searchRequest by mutableStateOf("")
+
+/**
+ * 抽屉顶部插画。Android 用的是一张低多边形熊猫 webp，这里用 Canvas 按同样的构图
+ * 画一个几何化版本：草地多边形 + 黑白熊猫剪影。不依赖图片资源，避免包体积和
+ * composeResources 的打包问题。
+ */
+@Composable
+private fun PandaHeader() {
+    Canvas(modifier = Modifier.fillMaxWidth().height(190.dp)) {
+        val w = size.width
+        val h = size.height
+
+        // 草地：几段折线拼出的低多边形山坡
+        val grass = Path().apply {
+            moveTo(0f, h * 0.56f)
+            lineTo(w * 0.22f, h * 0.44f)
+            lineTo(w * 0.46f, h * 0.54f)
+            lineTo(w * 0.72f, h * 0.40f)
+            lineTo(w, h * 0.56f)
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawPath(grass, Color(0xFF9CC27A))
+
+        // 身体
+        drawCircle(Color(0xFF3B3B3B), radius = h * 0.20f, center = Offset(w * 0.56f, h * 0.70f))
+        // 头
+        drawCircle(Color(0xFFF2F2F2), radius = h * 0.17f, center = Offset(w * 0.56f, h * 0.42f))
+        // 耳朵
+        drawCircle(Color(0xFF2C2C2C), radius = h * 0.065f, center = Offset(w * 0.45f, h * 0.28f))
+        drawCircle(Color(0xFF2C2C2C), radius = h * 0.065f, center = Offset(w * 0.67f, h * 0.28f))
+        // 眼罩
+        drawCircle(Color(0xFF2C2C2C), radius = h * 0.042f, center = Offset(w * 0.50f, h * 0.41f))
+        drawCircle(Color(0xFF2C2C2C), radius = h * 0.042f, center = Offset(w * 0.62f, h * 0.41f))
+        // 鼻子
+        drawCircle(Color(0xFF1F1F1F), radius = h * 0.018f, center = Offset(w * 0.56f, h * 0.48f))
+    }
+}
