@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -19,10 +21,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,16 +55,13 @@ fun ReaderScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val horizontal = remember { Prefs.getString("reader.horizontal") == "1" }
+
     // 进度记忆：下次打开直接跳到上次位置
     val progressKey = "progress.${site.name}.$galleryId"
     val startPage = remember(galleryId) {
-        Prefs.getString(progressKey)?.toIntOrNull()?.coerceIn(0, (pages.size - 1).coerceAtLeast(0)) ?: 0
-    }
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startPage)
-    LaunchedEffect(listState, progressKey) {
-        snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
-            Prefs.putString(progressKey, "$index")
-        }
+        Prefs.getString(progressKey)?.toIntOrNull()
+            ?.coerceIn(0, (pages.size - 1).coerceAtLeast(0)) ?: 0
     }
 
     Scaffold(
@@ -81,12 +80,48 @@ fun ReaderScreen(
             )
         },
     ) { padding ->
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding)) {
-            itemsIndexed(pages) { index, page ->
-                if (page.isPageUrl) {
-                    EhPageView(index, page.url)
-                } else {
-                    DirectPageView(index, page)
+        if (horizontal) {
+            val pagerState = rememberPagerState(initialPage = startPage) { pages.size }
+            LaunchedEffect(pagerState, progressKey) {
+                snapshotFlow { pagerState.currentPage }.collect { index ->
+                    Prefs.putString(progressKey, "$index")
+                }
+            }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            ) { index ->
+                val page = pages[index]
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color(0xFF111111)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (page.isPageUrl) {
+                        EhSinglePage(page.url, index)
+                    } else {
+                        AsyncImage(
+                            model = page.url,
+                            contentDescription = "第 ${index + 1} 页",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+        } else {
+            val listState = rememberLazyListState(initialFirstVisibleItemIndex = startPage)
+            LaunchedEffect(listState, progressKey) {
+                snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
+                    Prefs.putString(progressKey, "$index")
+                }
+            }
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding)) {
+                itemsIndexed(pages) { index, page ->
+                    if (page.isPageUrl) {
+                        EhPageView(index, page.url)
+                    } else {
+                        DirectPageView(index, page)
+                    }
                 }
             }
         }
@@ -129,7 +164,6 @@ private fun EhPageView(index: Int, pageUrl: String) {
                 }
                 .onFailure { error = it.message ?: it.toString() }
         }
-        // 给站点留点空隙，避免连续请求被限流
         delay(260)
         landing = false
     }
@@ -161,5 +195,41 @@ private fun EhPageView(index: Int, pageUrl: String) {
                 modifier = Modifier.fillMaxWidth(0.12f),
             )
         }
+    }
+}
+
+/** 横向翻页时的单页。 */
+@Composable
+private fun EhSinglePage(pageUrl: String, index: Int) {
+    var imageUrl by remember(pageUrl) { mutableStateOf<String?>(null) }
+    var error by remember(pageUrl) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(pageUrl) {
+        ehGate.withPermit {
+            runCatching { EhSource.readerPage(pageUrl) }
+                .onSuccess { (src, _) ->
+                    imageUrl = src
+                    if (src == null) error = "拿不到原图"
+                }
+                .onFailure { error = it.message ?: it.toString() }
+        }
+        delay(260)
+    }
+
+    when {
+        imageUrl != null -> AsyncImage(
+            model = imageUrl,
+            contentDescription = "第 ${index + 1} 页",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        error != null -> Text(
+            "第 ${index + 1} 页: $error",
+            color = Color(0xFF8A8A8A),
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        else -> CircularProgressIndicator(color = Color(0xFF888888))
     }
 }
