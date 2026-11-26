@@ -2,16 +2,28 @@ name: iosApp
 options:
   bundleIdPrefix: moe.tarsin
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "16.0"
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: "NO"
     # 先出未签名包，签名由使用者自己用工具重签
     CODE_SIGN_IDENTITY: ""
     CODE_SIGNING_REQUIRED: "NO"
     CODE_SIGNING_ALLOWED: "NO"
+    # Xcode 16+ 的构建产物分裂机制。开着它主二进制会退化成 71KB 的 stub，
+    # 真代码塞进 EhViewer.debug.dylib，自签装到真机上 dyld 解析不了直接闪退。
+    ENABLE_DEBUG_DYLIB: "NO"
+    ENABLE_PREVIEWS: "NO"
+    DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+  configs:
+    Debug:
+      FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../shared/build/bin/iosArm64/debugFramework
+    Release:
+      FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../shared/build/bin/iosArm64/releaseFramework
 targets:
   iosApp:
     type: application
@@ -23,7 +35,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: moe.tarsin.ehviewer
         PRODUCT_NAME: EhViewer
         INFOPLIST_FILE: iosApp/Info.plist
-        FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../shared/build/bin/iosArm64/debugFramework
         OTHER_LDFLAGS: $(inherited) -framework Shared
         LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks
         ENABLE_BITCODE: "NO"
+        # 静态 framework 里的 Kotlin 符号不能被 dead-strip 掉，否则 Swift 侧
+        # 调 MainViewControllerKt 时链接期或运行期找不到符号
+        DEAD_CODE_STRIPPING: "NO"
+        STRIP_INSTALLED_PRODUCT: "NO"
+      configs:
+        Release:
+          VALIDATE_PRODUCT: "YES"
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
