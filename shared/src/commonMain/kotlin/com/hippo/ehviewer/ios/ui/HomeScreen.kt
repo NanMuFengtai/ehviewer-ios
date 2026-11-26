@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ import coil3.compose.AsyncImage
 import com.hippo.ehviewer.ios.source.NhentaiApi
 import com.hippo.ehviewer.ios.source.NhentaiCdn
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +58,7 @@ fun HomeScreen(
     var endReached by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
 
     suspend fun load(target: Int) {
         if (loading) return
@@ -107,7 +110,7 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { load(1) }, enabled = !loading) {
+                    TextButton(onClick = { scope.launch { load(1) } }, enabled = !loading) {
                         Text("刷新")
                     }
                 },
@@ -117,7 +120,7 @@ fun HomeScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 items.isEmpty() && loading -> CenterProgress()
-                items.isEmpty() && error != null -> ErrorPane(error!!) { load(1) }
+                items.isEmpty() && error != null -> ErrorPane(error!!) { scope.launch { load(1) } }
                 items.isEmpty() -> EmptyPane()
                 else -> LazyVerticalGrid(
                     state = gridState,
