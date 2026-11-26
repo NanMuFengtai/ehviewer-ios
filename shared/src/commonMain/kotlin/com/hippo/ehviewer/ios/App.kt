@@ -11,6 +11,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,6 +76,8 @@ private fun AppNavigation(
 ) {
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     var site by remember { mutableStateOf(Site.EHENTAI) }
+    var searchSeq by remember { mutableIntStateOf(0) }
+    var searchText by remember { mutableStateOf("") }
 
     fun push(route: Route) {
         backStack.add(route)
@@ -91,6 +94,8 @@ private fun AppNavigation(
                 onSwitchSite = { site = it },
                 onOpenDetail = { s, id, token, title -> push(Route.Detail(s, id, token, title)) },
                 onOpenSettings = { push(Route.Settings) },
+                searchSeq = searchSeq,
+                searchText = searchText,
                 modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
             )
 
@@ -101,6 +106,11 @@ private fun AppNavigation(
                 fallbackTitle = route.title,
                 onBack = { pop() },
                 onRead = { s, id, title, pages -> push(Route.Reader(s, id, title, pages)) },
+                onTagClick = { tag ->
+                    searchText = tag
+                    searchSeq += 1
+                    while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
             )
 
