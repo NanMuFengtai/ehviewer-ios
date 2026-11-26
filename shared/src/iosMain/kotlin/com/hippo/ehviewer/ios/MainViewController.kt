@@ -1,12 +1,9 @@
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class, kotlin.experimental.ExperimentalNativeApi::class)
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class)
 
 package com.hippo.ehviewer.ios
 
 import androidx.compose.ui.window.ComposeUIViewController
-import kotlinx.cinterop.cstr
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
-import kotlin.native.runtime.setUnhandledExceptionHook
+import kotlin.native.setUnhandledExceptionHook
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSTemporaryDirectory
@@ -20,6 +17,7 @@ import platform.posix.fputs
  * iOS 端的诊断日志。和 Swift 侧共用 Documents 目录，能从「文件」App 取出来。
  *
  * 走 POSIX fopen/fputs 而不是 Foundation：崩溃路径上不能碰可能已经坏掉的运行时。
+ * Kotlin/Native 的 posix 绑定会把 const char* 映射成 String，直接传就行。
  */
 private fun diagPath(): String {
     val dirs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
@@ -28,12 +26,10 @@ private fun diagPath(): String {
 }
 
 private fun diag(text: String) {
-    memScoped {
-        val file = fopen(diagPath().cstr.ptr, "a".cstr.ptr) ?: return@memScoped
-        fputs(text.cstr.ptr, file)
-        fputs("\n".cstr.ptr, file)
-        fclose(file)
-    }
+    val file = fopen(diagPath(), "a") ?: return
+    fputs(text, file)
+    fputs("\n", file)
+    fclose(file)
 }
 
 private fun Throwable.traceOrFallback(): String = try {
