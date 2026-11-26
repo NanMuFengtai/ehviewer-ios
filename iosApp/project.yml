@@ -27,9 +27,3 @@ targets:
         OTHER_LDFLAGS: $(inherited) -framework Shared
         LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks
         ENABLE_BITCODE: "NO"
-    preBuildScripts:
-      - name: Build Kotlin framework
-        script: |
-          cd "$SRCROOT/.."
-          ./gradlew :shared:linkDebugFrameworkIosArm64 -PenableIosTargets=true --no-daemon
-        basedOnDependencyAnalysis: false
