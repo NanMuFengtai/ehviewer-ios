@@ -64,6 +64,25 @@ jobs:
           test -d "$APP"
           ls -la "$APP"
 
+      - name: List symbols missing from older iOS SDK
+        run: |
+          set -uo pipefail
+          APP="iosApp/build/Build/Products/Debug-iphonesimulator/EhViewer.app"
+          OLD_SDK=$(ls -d /Applications/Xcode_16.*.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS*.sdk 2>/dev/null | tail -1)
+          echo "old sdk = ${OLD_SDK:-none}"
+          nm -u "$APP/EhViewer" 2>/dev/null | awk '{print $NF}' | sort -u > /tmp/imports.txt
+          echo "imported symbols: $(wc -l < /tmp/imports.txt)"
+          if [ -n "$OLD_SDK" ]; then
+            find "$OLD_SDK/System/Library/Frameworks" -name '*.tbd' -exec cat {} + 2>/dev/null \
+              | grep -oE '_[A-Za-z_][A-Za-z0-9_]*' | sort -u > /tmp/sdk_syms.txt
+            echo "sdk symbols seen: $(wc -l < /tmp/sdk_syms.txt)"
+            comm -23 /tmp/imports.txt /tmp/sdk_syms.txt > /tmp/missing.txt
+            echo "--- referenced but absent from old SDK (count $(wc -l < /tmp/missing.txt)) ---"
+            cat /tmp/missing.txt
+            echo "--- CoreGraphics/Metal/UIKit ones ---"
+            grep -E '^_(kCG|MTL|UI)' /tmp/missing.txt || true
+          fi
+
       - name: Run on simulator and capture crash
         run: |
           set -uo pipefail
