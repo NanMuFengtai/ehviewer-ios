@@ -28,7 +28,7 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build Kotlin framework
-        run: ./gradlew :shared:linkDebugFrameworkIosArm64 -PenableIosTargets=true --no-daemon --stacktrace
+        run: ./gradlew :shared:linkDebugFrameworkIosArm64 -PenableIosTargets=true -PciBuild --no-daemon --stacktrace
 
       - name: Install XcodeGen
         run: brew install xcodegen
