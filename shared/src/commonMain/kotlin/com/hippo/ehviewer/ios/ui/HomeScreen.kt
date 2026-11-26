@@ -18,10 +18,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,9 +42,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -51,6 +54,7 @@ import com.hippo.ehviewer.ios.source.ListEntry
 import com.hippo.ehviewer.ios.source.NhentaiApi
 import com.hippo.ehviewer.ios.source.NhentaiCdn
 import com.hippo.ehviewer.ios.source.Site
+import com.hippo.ehviewer.ios.store.HistoryStore
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,6 +63,7 @@ fun HomeScreen(
     site: Site,
     onSwitchSite: (Site) -> Unit,
     onOpenDetail: (Site, Long, String, String) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val entries = remember { mutableStateListOf<ListEntry>() }
@@ -66,6 +71,8 @@ fun HomeScreen(
     var loading by remember { mutableStateOf(false) }
     var endReached by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
+    var searchInput by remember { mutableStateOf("") }
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
@@ -76,7 +83,7 @@ fun HomeScreen(
         runCatching {
             when (site) {
                 Site.EHENTAI -> {
-                    val r = EhSource.list(target)
+                    val r = EhSource.list(target, query.takeIf { it.isNotBlank() })
                     r.items.map { g ->
                         ListEntry(
                             id = g.gid,
@@ -95,21 +102,31 @@ fun HomeScreen(
 
                 Site.NHENTAI -> {
                     NhentaiCdn.refresh()
-                    val r = NhentaiApi.list(target + 1)
-                    r.result.map { g ->
-                        ListEntry(
-                            id = g.id,
-                            token = "",
-                            title = g.title,
-                            thumb = NhentaiCdn.thumb(g.thumbnail),
-                            pages = g.num_pages,
-                            meta = "${g.num_pages}页 · ${g.num_favorites}收藏",
-                        )
-                    } to (target + 1 >= r.num_pages || r.result.isEmpty())
+                    if (query.isBlank()) {
+                        val r = NhentaiApi.list(target + 1)
+                        r.result.map { g ->
+                            ListEntry(
+                                g.id, "", g.title,
+                                NhentaiCdn.thumb(g.thumbnail),
+                                g.num_pages,
+                                "${g.num_pages}页 · ${g.num_favorites}收藏",
+                            )
+                        } to (target + 1 >= r.num_pages || r.result.isEmpty())
+                    } else {
+                        val r = NhentaiApi.search(query, target + 1)
+                        r.result.map { g ->
+                            ListEntry(
+                                g.id, "", g.title,
+                                NhentaiCdn.thumb(g.thumbnail),
+                                g.num_pages,
+                                "${g.num_pages}页 · ${g.num_favorites}收藏",
+                            )
+                        } to (target + 1 >= r.num_pages || r.result.isEmpty())
+                    }
                 }
 
                 Site.JMCOMIC -> {
-                    val r = JmSource.list(target + 1)
+                    val r = JmSource.list(target + 1, query = query)
                     r.content.map { g ->
                         ListEntry(
                             id = g.albumId,
@@ -127,13 +144,11 @@ fun HomeScreen(
             entries.addAll(list)
             pageIndex = target
             endReached = end
-        }.onFailure {
-            error = it.message ?: it.toString()
-        }
+        }.onFailure { error = it.message ?: it.toString() }
         loading = false
     }
 
-    LaunchedEffect(site) {
+    LaunchedEffect(site, query) {
         entries.clear()
         pageIndex = 0
         endReached = false
@@ -141,7 +156,7 @@ fun HomeScreen(
         load(0, reset = true)
     }
 
-    LaunchedEffect(gridState, site) {
+    LaunchedEffect(gridState, site, query) {
         snapshotFlow {
             val info = gridState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -158,16 +173,34 @@ fun HomeScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = {
-                        Text("很太之家", style = MaterialTheme.typography.titleLarge)
-                    },
+                    title = { Text("很太之家", style = MaterialTheme.typography.titleLarge) },
                     actions = {
                         TextButton(onClick = { scope.launch { load(0, true) } }, enabled = !loading) {
                             Text("刷新")
                         }
+                        TextButton(onClick = onOpenSettings) { Text("设置") }
                     },
                 )
                 SiteTabs(current = site, onSelect = onSwitchSite)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = searchInput,
+                        onValueChange = { searchInput = it },
+                        placeholder = { Text("搜索 ${site.label}", style = MaterialTheme.typography.bodySmall) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { query = searchInput.trim() }),
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { query = searchInput.trim() }) { Text("搜索") }
+                    if (query.isNotBlank()) {
+                        TextButton(onClick = { searchInput = ""; query = "" }) { Text("清空") }
+                    }
+                }
             }
         },
     ) { padding ->
@@ -189,6 +222,7 @@ fun HomeScreen(
                 ) {
                     items(entries, key = { "${site.name}-${it.id}" }) { item ->
                         GalleryCard(site, item) {
+                            HistoryStore.add(site, item.id, item.token, item.title, item.thumb)
                             onOpenDetail(site, item.id, item.token, item.title)
                         }
                     }
