@@ -16,7 +16,10 @@ plugins {
 // 这样每次改动提交后自动变成 1.15.14、1.15.15……不用手改。
 val versionBaseCommit = "e32f0d6"
 val versionBasePatch = 13
-val commitsSinceBase = runCatching {
+// CI 上推的是单提交快照，没有基准提交的历史，git 调用会失败并让配置缓存报错；
+// 加 -PciBuild 时跳过所有 git 查询，用固定值。
+val ciBuild = providers.gradleProperty("ciBuild").isPresent
+val commitsSinceBase = if (ciBuild) 0 else runCatching {
     providers.exec {
         commandLine = "git rev-list --count $versionBaseCommit..HEAD".split(' ')
     }.standardOutput.asText.get().trim().toInt()
@@ -72,15 +75,15 @@ android {
         signingConfigs.getByName("debug") // Secret-free CI snapshots cannot be installed over production.
     }
 
-    val commitSha = providers.exec {
+    val commitSha = if (ciBuild) "cibuild" else providers.exec {
         commandLine = "git rev-parse --short=7 HEAD".split(' ')
     }.standardOutput.asText.get().trim()
 
-    val commitTime = providers.exec {
+    val commitTime = if (ciBuild) "0" else providers.exec {
         commandLine = "git log -1 --format=%ct".split(' ')
     }.standardOutput.asText.get().trim()
 
-    val repoName = providers.exec {
+    val repoName = if (ciBuild) "ehviewer-ios" else providers.exec {
         commandLine = "git remote get-url origin".split(' ')
     }.standardOutput.asText.get().trim().removePrefix("https://github.com/").removePrefix("git@github.com:")
         .removeSuffix(".git")
