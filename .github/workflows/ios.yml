@@ -91,6 +91,16 @@ jobs:
           echo "--- linked libraries ---"
           otool -L "$APP/EhViewer"
 
+          # 最低系统版本必须压在 15.x 以内，否则 iOS 15 设备一装就崩
+          MINOS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist")
+          echo "MinimumOSVersion = $MINOS"
+          case "$MINOS" in
+            1[0-5].*) echo "iOS floor ok: $MINOS" ;;
+            *) echo "::error::MinimumOSVersion=$MINOS 高于 15.x，iOS 15 设备跑不了"; exit 1 ;;
+          esac
+          echo "--- Mach-O build version ---"
+          otool -l "$APP/EhViewer" | grep -A4 'LC_BUILD_VERSION' | grep -E 'platform|minos|sdk' || true
+
           mkdir -p Payload
           cp -R "$APP" Payload/
           # 只 zip 内容，不带 Payload 目录本身之外的杂物
