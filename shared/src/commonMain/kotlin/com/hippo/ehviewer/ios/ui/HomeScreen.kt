@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.hippo.ehviewer.ios.source.EhSource
+import com.hippo.ehviewer.ios.source.JmSource
 import com.hippo.ehviewer.ios.source.ListEntry
 import com.hippo.ehviewer.ios.source.NhentaiApi
 import com.hippo.ehviewer.ios.source.NhentaiCdn
@@ -107,7 +108,19 @@ fun HomeScreen(
                     } to (target + 1 >= r.num_pages || r.result.isEmpty())
                 }
 
-                Site.JMCOMIC -> emptyList<ListEntry>() to true
+                Site.JMCOMIC -> {
+                    val r = JmSource.list(target + 1)
+                    r.content.map { g ->
+                        ListEntry(
+                            id = g.albumId,
+                            token = "",
+                            title = g.name.ifBlank { "#${g.albumId}" },
+                            thumb = JmSource.coverUrl(g.albumId),
+                            pages = 0,
+                            meta = g.author.ifBlank { g.category.title },
+                        )
+                    } to r.content.isEmpty()
+                }
             }
         }.onSuccess { (list, end) ->
             if (reset) entries.clear()
