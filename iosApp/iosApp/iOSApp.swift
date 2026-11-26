@@ -11,7 +11,7 @@ import Shared
 // UIFileSharingEnabled 已经打开，可以从「文件 → 我的 iPhone → 很太之家」取日志。
 
 private let kCrashLogName = "crash.log"
-private let kBuildTag = "1.15.29-fav"
+private let kBuildTag = "1.15.30-reader"
 private let kPathCap = 4096
 /// 预分配，signal handler 里不能再 malloc
 private let gCrashPath = UnsafeMutablePointer<CChar>.allocate(capacity: kPathCap)
