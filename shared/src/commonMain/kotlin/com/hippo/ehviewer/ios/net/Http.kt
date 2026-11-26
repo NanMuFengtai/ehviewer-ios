@@ -41,10 +41,12 @@ suspend fun getText(
     url: String,
     page: Int? = null,
     params: Map<String, String> = emptyMap(),
+    headers: Map<String, String> = emptyMap(),
 ): String {
     val response = httpClient.get(url) {
         page?.let { parameter("page", it) }
         params.forEach { (name, value) -> parameter(name, value) }
+        headers.forEach { (name, value) -> header(name, value) }
     }
     val text = response.bodyAsText()
     if (!response.status.isSuccess()) {
