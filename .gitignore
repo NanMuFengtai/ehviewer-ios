@@ -1,0 +1,29 @@
+.gradle
+/local.properties
+.DS_Store
+build
+.cxx
+.kotlin
+*.iml
+.idea
+.vscode
+/captures
+
+# Native build caches and local, access-restricted release diagnostics
+/native/rust/target/
+/.private-release/
+/release-dry-run/
+/reports/
+
+# Generated verification and emulator inputs/reports
+/device-inputs/
+/device-reports/
+
+# Local signing material and regression data restored from the immutable test baseline
+/.private-signing/
+/.local-test-fixtures/
+/release-output/
+
+out/
+build-*.log
+tools/__pycache__/

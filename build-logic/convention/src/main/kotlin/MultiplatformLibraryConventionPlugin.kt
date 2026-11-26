@@ -1,0 +1,69 @@
+import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
+import com.android.build.api.dsl.Lint
+import com.ehviewer.configureKotlin
+import com.ehviewer.configureLint
+import com.ehviewer.configureSpotless
+import com.ehviewer.libs
+import org.gradle.api.Plugin
+import org.gradle.api.Project
+import org.gradle.kotlin.dsl.apply
+import org.gradle.kotlin.dsl.assign
+import org.gradle.kotlin.dsl.configure
+import org.gradle.kotlin.dsl.dependencies
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+
+@OptIn(ExperimentalKotlinGradlePluginApi::class)
+class MultiplatformLibraryConventionPlugin : Plugin<Project> {
+    override fun apply(target: Project) = with(target) {
+        apply(plugin = libs.plugins.kotlin.multiplatform.get().pluginId)
+        apply(plugin = libs.plugins.android.kotlin.multiplatform.library.get().pluginId)
+        apply(plugin = libs.plugins.android.lint.get().pluginId)
+
+        configure<KotlinMultiplatformExtension> {
+            val javaVersion = libs.versions.java.get().toInt()
+            jvmToolchain(javaVersion)
+            compilerOptions {
+                configureKotlin(includeKotlinX = path != ":core:i18n")
+            }
+
+            // iOS 目标只在 macOS 上能编译，Windows/Linux 上默认关掉，避免解析 iOS 依赖拖慢构建
+            if (providers.gradleProperty("enableIosTargets").isPresent) {
+                iosArm64()
+                iosSimulatorArm64()
+            }
+
+            applyHierarchyTemplate {
+                common {
+                    group("jvm") {
+                        withCompilations { it.target is KotlinMultiplatformAndroidLibraryTarget }
+                        withJvm()
+                    }
+                }
+            }
+
+            configure<KotlinMultiplatformAndroidLibraryTarget> {
+                namespace = "com.ehviewer${path.replace(':', '.')}"
+
+                // https://youtrack.jetbrains.com/issue/KT-83319
+                withHostTestBuilder {
+                }
+
+                enableCoreLibraryDesugaring = true
+
+                compilerOptions {
+                    jvmTarget = JvmTarget.fromTarget(libs.versions.android.jvm.get())
+                    jvmDefault = JvmDefaultMode.NO_COMPATIBILITY
+                }
+            }
+        }
+        configure<Lint>(Lint::configureLint)
+        configureSpotless()
+
+        dependencies {
+            "coreLibraryDesugaring"(libs.desugar)
+        }
+    }
+}

@@ -1,0 +1,35 @@
+name: iosApp
+options:
+  bundleIdPrefix: moe.tarsin
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    # 先出未签名包，签名由使用者自己用工具重签
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: moe.tarsin.ehviewer
+        PRODUCT_NAME: EhViewer
+        INFOPLIST_FILE: iosApp/Info.plist
+        FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../shared/build/bin/iosArm64/debugFramework
+        OTHER_LDFLAGS: $(inherited) -framework Shared
+        LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks
+        ENABLE_BITCODE: "NO"
+    preBuildScripts:
+      - name: Build Kotlin framework
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared:linkDebugFrameworkIosArm64 -PenableIosTargets=true --no-daemon
+        basedOnDependencyAnalysis: false

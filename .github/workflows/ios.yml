@@ -1,0 +1,63 @@
+name: Build iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios]
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build Kotlin framework
+        run: ./gradlew :shared:linkDebugFrameworkIosArm64 -PenableIosTargets=true --no-daemon --stacktrace
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: cd iosApp && xcodegen generate
+
+      - name: Build app
+        run: |
+          cd iosApp
+          xcodebuild \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination generic/platform=iOS \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned ipa
+        run: |
+          mkdir -p Payload
+          cp -R iosApp/build/Build/Products/Debug-iphoneos/EhViewer.app Payload/
+          zip -qry 很太之家-ios-unsigned.ipa Payload
+          ls -lh 很太之家-ios-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ehviewer-ios-unsigned
+          path: 很太之家-ios-unsigned.ipa
+          retention-days: 7
