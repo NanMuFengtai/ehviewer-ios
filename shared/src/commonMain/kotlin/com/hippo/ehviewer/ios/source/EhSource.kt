@@ -39,6 +39,14 @@ data class EhPreview(val pageUrl: String, val thumbUrl: String)
 
 data class EhTag(val namespace: String, val name: String)
 
+data class EhComment(
+    val id: Long,
+    val user: String,
+    val time: String,
+    val content: String,
+    val score: Int,
+)
+
 data class EhDetail(
     val item: EhGalleryItem,
     val size: String?,
@@ -46,6 +54,7 @@ data class EhDetail(
     val favoriteCount: Int,
     val tagGroups: List<Pair<String, List<EhTag>>>,
     val previews: List<EhPreview>,
+    val comments: List<EhComment>,
 )
 
 /**
@@ -98,6 +107,12 @@ object EhSource {
             if (params.isNotEmpty()) append('?').append(params.joinToString("&"))
         }
         val html = fetchHtml(url)
+        return parseList(html)
+    }
+
+    /** 收藏夹。结构和普通列表页一样，直接复用解析。 */
+    suspend fun favorites(page: Int): EhListResult {
+        val html = fetchHtml("$host/favorites.php?page=$page")
         return parseList(html)
     }
 
@@ -320,7 +335,40 @@ object EhSource {
             favoriteCount = favoriteCount,
             tagGroups = tagGroups,
             previews = previews,
+            comments = parseComments(html),
         )
+    }
+
+    /** 评论区。#cdiv 里每块 .c1 是一条。 */
+    private fun parseComments(html: String): List<EhComment> {
+        val cdiv = Html.findById(html, "cdiv") ?: return emptyList()
+        val result = mutableListOf<EhComment>()
+        Html.findAllByClass(cdiv.inner, "c1").forEach { block ->
+            val idText = Regex("""comment_?(\d+)""").find(
+                Html.firstByClass(block.inner, "c2")?.inner ?: "",
+            )?.groupValues?.get(1)
+            val timeText = Html.firstByClass(block.inner, "c2")?.text()
+                ?.replace(Regex("""\s+"""), " ")?.trim() ?: ""
+            val user = Html.firstTagByClass(block.inner, "a", "c4")
+                ?.text()
+                ?: Regex("""by\s*<a[^>]*>([^<]+)</a>""").find(block.inner)
+                    ?.groupValues?.get(1) ?: ""
+            val content = Html.firstByClass(block.inner, "c6")?.text() ?: ""
+            val score = Regex("""score:\s*(-?\d+)""").find(block.inner)
+                ?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            if (content.isNotBlank() || user.isNotBlank()) {
+                result.add(
+                    EhComment(
+                        id = idText?.toLongOrNull() ?: 0,
+                        user = Html.unescape(user).trim(),
+                        time = timeText,
+                        content = content,
+                        score = score,
+                    ),
+                )
+            }
+        }
+        return result.take(30)
     }
 
     // ---------- 阅读器 ----------
